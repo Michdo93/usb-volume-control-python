@@ -217,3 +217,29 @@ sudo systemctl start usb-volume-mqtt.service
 sudo systemctl status usb-volume-mqtt.service
 journalctl -u usb-volume-mqtt.service -f
 ```
+
+
+---
+
+## openHAB Integration
+
+This repository includes an `openhab/` directory structured for direct integration into your openHAB configuration (e.g., via text-file configuration or file-based deployment).
+
+### Directory Structure
+```text
+openhab/
+├── items/                  # Item definitions
+├── sitemaps/               # UI Sitemaps
+├── things/                 # MQTT Things & Channels
+├── rules/                  # openHAB DSL Rules
+└── automation/
+    ├── python/             # Python 3 JSR223 Rules
+    └── js/                 # JavaScript Automation Rules
+```
+
+### Setup Steps
+
+1. Ensure the **MQTT Binding** and optionally **Sonos Binding** are installed in openHAB (`Settings -> Bindings`).
+2. Copy the contents of the `openhab/` folder into your openHAB configuration directory (typically `/etc/openhab/`).
+3. The MQTT Thing will automatically connect to your local Mosquitto broker and listen to the topic `usbdevice/volume_controller/command`.
+4. Choose **one** rule implementation (DSL in `openhab/rules/`, Python in `openhab/automation/python/`, or JS in `openhab/automation/js/`) to translate incoming payloads (`INCREASE`, `DECREASE`, `MUTE_UNMUTE`, `PLAY_PAUSE`, `NEXT`, `PREVIOUS`) into actions for your virtual or physical Sonos items (`Sonos_Volume`, `Sonos_Mute`, `Sonos_Controller`).
