@@ -1,1 +1,36 @@
-a
+rule "USB Controller Sonos Control DSL"
+when
+    Item USB_Volume_Controller_Command received command
+then
+    val cmd = receivedCommand.toString
+
+    switch (cmd) {
+        case "INCREASE": {
+            Sonos_Volume.sendCommand(INCREASE)
+        }
+        case "DECREASE": {
+            Sonos_Volume.sendCommand(DECREASE)
+        }
+        case "MUTE_UNMUTE": {
+            if (Sonos_Mute.state == ON) {
+                Sonos_Mute.sendCommand(OFF)
+            } else {
+                Sonos_Mute.sendCommand(ON)
+            }
+        }
+        case "PLAY_PAUSE": {
+            // If Sonos_Stop is ON (paused/stopped), we turn it off (Play); otherwise, we turn it on (Stop/Pause)
+            if (Sonos_Stop.state == ON) {
+                Sonos_Stop.sendCommand(OFF)
+            } else {
+                Sonos_Stop.sendCommand(ON)
+            }
+        }
+        case "NEXT": {
+            Sonos_Controller.sendCommand(NEXT)
+        }
+        case "PREVIOUS": {
+            Sonos_Controller.sendCommand(PREVIOUS)
+        }
+    }
+end
