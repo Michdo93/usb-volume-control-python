@@ -1,47 +1,70 @@
-# usb-volume-control-python
+# USB Volume Control (Python)
 
-A Python script that reads input from USB volume controls and outputs the command to be executed to the command line. This code can be used later to map this control to other functions.
+A simple, robust Python script to control system volume and media playback using a USB multimedia knob / audio system (`Vendor ID: e5b7`, `Product ID: 0811`). Tested on Linux (Ubuntu / OpenHAB server environments using PulseAudio or PipeWire).
 
-USB volume controls like these almost always register with the operating system as a standard USB keyboard or HID media device. When you turn or press the knob, the hardware simply sends standard key codes to the kernel (such as `KEY_VOLUMEUP`, `KEY_VOLUMEDOWN`, and `KEY_MUTE`).
-
-To prevent Ubuntu or the Raspberry Pi OS from changing the system volume by default, you must intercept the input event using **`evdev`** in what’s known as **exclusive mode (`grab()`)**. As a result, Python receives the event and hides it from the rest of the operating system.
-
-## Preparation / Installation
-
-Install the `evdev` library for Python:
-
-```bash
-pip install evdev
-```
-
-*Note for Linux:* To allow your script to access the event devices (`/dev/input/event*`) without using `sudo`, your user must be a member of the `input` group:
-
-```bash
-sudo usermod -aG input $USER
-```
-
-*(Then log in again).*
+## Features
+- **Rotary Encoder:** Adjust system volume up/down smoothly.
+- **Knob Press:** Toggle Mute / Unmute.
+- **Media Keys:** Play/Pause, Next Track, Previous Track (via `playerctl`).
+- **Clean Exit:** Graceful shutdown on `Ctrl+C` without blocking threads.
 
 ---
 
-## Python-Skript
+## Prerequisites & Installation
 
-Edit and save the `volume_control.py` file. Adjust the device name in the script if the system refers to it by a different name.
+### 1. System Dependencies
+Make sure Python 3, pip, and necessary system audio/HID tools are installed:
 
+```bash
+sudo apt update
+sudo apt install python3-pip python3-hidapi playerctl
 ```
-nano volume_control.py
+
+### 2. Python Libraries
+
+Install the required Python package for audio management:
+
+```bash
+pip install pulsectl hidapi
 ```
 
-After making important changes you can run it with:
+---
 
+## Hardware Setup & Permissions (Udev Rules)
+
+To allow your user account to access the USB HID device without requiring `sudo`, you need to set up a udev rule.
+
+1. Verify your device is detected using `lsusb`:
+```bash
+lsusb -d e5b7:0811
 ```
+
+*(Expected output: `ID e5b7:0811 ZhenHuiDesignTechnology USB-AUDIO SYSTEM`)*
+2. Create a new udev rule file:
+```bash
+sudo nano /etc/udev/rules.d/99-usb-volume.rules
+```
+
+3. Add the following lines to the file:
+```text
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="e5b7", ATTRS{idProduct}=="0811", MODE="0666"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="e5b7", ATTRS{idProduct}=="0811", MODE="0666"
+```
+
+4. Save and reload the udev rules, then unplug and re-plug your device:
+```bash
+sudo udevadm control --reload-rules
+sudo udevadm trigger
+```
+
+---
+
+## Usage
+
+Run the script directly from your terminal:
+
+```bash
 python3 volume_control.py
 ```
 
----
-
-## What the Code Does
-
-1. **`device.grab()`**: This is the core element. It takes exclusive control of the USB button's event interface. Neither Pulseaudio/Pipewire nor the desktop manager (GNOME/KDE/Raspberry Pi Desktop) receives the event. The system volume remains unaffected.
-2. **`device.read_loop()`**: Reads from the stream continuously.
-3. **`ecodes.EV_KEY`**: Turning clockwise typically triggers `KEY_VOLUMEUP` in bursts, turning counterclockwise triggers `KEY_VOLUMEDOWN`, and pressing the button triggers `KEY_MUTE` (or, on some models, `KEY_MEDIA` / `KEY_PLAYPAUSE`).
+To run it as a background service or daemon on your server, you can wrap it inside a `systemd` service or use tools like `screen` / `tmux`.
