@@ -1,0 +1,6 @@
+Bridge mqtt:broker:mosquitto "MQTT Broker" [ host="localhost", port=1883, secure=false ] {
+    Thing mqtt:topic:usb_volume_controller "USB Volume Controller" (mqtt:broker:mosquitto) {
+        Channels:
+            Type string : command "USB Volume Controller Command" [ stateTopic="usbdevice/volume_controller/command" ]
+    }
+}
