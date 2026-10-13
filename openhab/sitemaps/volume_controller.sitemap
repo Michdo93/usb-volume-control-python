@@ -1,0 +1,11 @@
+sitemap usb_controller label="Volume Control & Sonos Control" {
+    Frame label="Hardware Controller Status" {
+        Text item=USB_Volume_Controller_Command
+    }
+    Frame label="Sonos Player Control" {
+        Slider item=Sonos_Volume
+        Switch item=Sonos_Mute
+        // Control Group / Playback Buttons
+        Selection item=Sonos_Controller mappings=[PLAY="Play", PAUSE="Pause", NEXT="Next", PREVIOUS="Previous"]
+    }
+}
