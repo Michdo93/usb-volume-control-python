@@ -1,0 +1,8 @@
+// The input from the USB controller (type: String, since payloads such as INCREASE, MUTE_UNMUTE, etc., are received)
+String USB_Volume_Controller_Command "USB Volume Controller Raw [%s]" { channel="mqtt:topic:usb_volume_controller:command" }
+
+// Sonos sample items (based on the official Sonos example)
+Group Sonos <player> "Player Sonos" (All)
+Dimmer Sonos_Volume       "Volume [%.1f %%]" <soundvolume>      (Sonos) {channel="sonos:PLAY1:living:volume"}
+Switch Sonos_Mute         "Mute"             <soundvolume_mute> (Sonos) {channel="sonos:PLAY1:living:mute"}
+Group Sonos_Controller    "Controller"                          (Sonos) {channel="sonos:PLAY1:living:control"}
