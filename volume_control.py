@@ -1,74 +1,93 @@
+import hid
+import pulsectl
+import subprocess
+import shutil
+import time
 import sys
-from evdev import InputDevice, list_devices, ecodes
 
-# Search term for the USB controller (name may vary, e.g., "USB Audio", "HID Control", "Acouto")
-DEVICE_KEYWORD = "USB"
-
-def find_knob_device():
-    """Search for the appropriate HID input device."""
-    devices = [InputDevice(path) for path in list_devices()]
-    for dev in devices:
-        # Search by input device name
-        if DEVICE_KEYWORD.lower() in dev.name.lower():
-            print(f"Device found: {dev.name} at {dev.path}")
-            return dev
-    return None
+VENDOR_ID = 0xe5b7
+PRODUCT_ID = 0x0811
 
 def main():
-    device = find_knob_device()
+    # Initialize PulseAudio / PipeWire control
+    try:
+        pulse = pulsectl.Pulse('usb-volume-control')
+    except Exception as e:
+        print(f"Error connecting to audio server: {e}")
+        return
     
-    if not device:
-        print("No matching device found. Available devices:")
-        for path in list_devices():
-            d = InputDevice(path)
-            print(f" - {d.path}: {d.name}")
-        sys.exit(1)
+    devices = hid.enumerate(VENDOR_ID, PRODUCT_ID)
+    if not devices:
+        print("Device not found! Is it plugged in?")
+        return
 
-    # EXCLUSIVE MODE (GRAB):
-    # Prevents the operating system from processing the event (no mute or volume drop in the system)
+    h = hid.device()
     try:
-        device.grab()
-        print(f"Successfully grabbed {device.name}. Mute/Volume events will be intercepted.\n")
-    except IOError:
-        print("Error occurred while grabbing the device. Do you have root/input permissions? (Use sudo)")
-        sys.exit(1)
+        h.open_path(devices[0]['path'])
+        # Set non-blocking mode so the script can exit cleanly on Ctrl+C
+        h.set_nonblocking(True)
+    except Exception as e:
+        print(f"Failed to open device path: {e}")
+        return
+
+    print("USB Volume Control successfully started. Listening for inputs (Press Ctrl+C to exit)...")
+
+    has_playerctl = shutil.which("playerctl") is not None
+    if not has_playerctl:
+        print("Notice: 'playerctl' not found. Media keys (Play/Next/Prev) will be ignored.")
 
     try:
-        for event in device.read_loop():
-            # Evaluate only key events (EV_KEY) and only the initial press/rotation (value == 1 or 2 for Repeat)
-            if event.type == ecodes.EV_KEY and event.value in (1, 2):
-                
-                if event.code == ecodes.KEY_VOLUMEUP:
-                    handle_volume_up()
-                elif event.code == ecodes.KEY_VOLUMEDOWN:
-                    handle_volume_down()
-                elif event.code in (ecodes.KEY_MUTE, ecodes.KEY_MIN_INTERESTING):
-                    handle_mute()
-                else:
-                    print(f"Unexpected Keycode: {event.code}")
+        while True:
+            data = h.read(64)
+            if not data:
+                time.sleep(0.05) # Prevent high CPU usage
+                continue
+            
+            cmd = data[0]
+            if cmd == 0:
+                continue
+
+            print(get_command_description(cmd))
+
+            # --- Volume Up / Down (Rotary Encoder) ---
+            if cmd == 1:  # Clockwise (+2%)
+                for sink in pulse.sink_list():
+                    pulse.volume_change_all_chans(sink, 0.02)
+            elif cmd == 2:  # Counter-clockwise (-2%)
+                for sink in pulse.sink_list():
+                    pulse.volume_change_all_chans(sink, -0.02)
+
+            # --- Mute / Unmute (Knob Press) ---
+            elif cmd == 4:
+                for sink in pulse.sink_list():
+                    new_mute_state = 0 if sink.mute else 1
+                    pulse.mute(sink, new_mute_state)
+
+            # --- Media Keys ---
+            elif has_playerctl:
+                if cmd == 8:   # Play/Pause
+                    subprocess.run(["playerctl", "play-pause"], stderr=subprocess.DEVNULL)
+                elif cmd == 16:  # Forward
+                    subprocess.run(["playerctl", "next"], stderr=subprocess.DEVNULL)
+                elif cmd == 32:  # Rewind
+                    subprocess.run(["playerctl", "previous"], stderr=subprocess.DEVNULL)
 
     except KeyboardInterrupt:
-        print("\nEnding script...")
+        print("\nProgram is shutting down...")
     finally:
-        # Release the exclusive lock when exiting
-        device.ungrab()
+        h.close()
+        print("Device closed safely. Goodbye!")
 
-# -------------------------------------------------------------------
-# Your Mapping Logic / Callbacks (as example openHAB REST commands)
-# -------------------------------------------------------------------
-
-def handle_volume_up():
-    print("[Action] Volume turned up -> Send command to openHAB item")
-    # to do: For example, requests.post(“http://openhab:8080/rest/items/MyVolumeItem”, data="INCREASE")
-
-def handle_volume_down():
-    print("[Action] Volume turned down -> Send command to openHAB item")
-    # to do: For example, requests.post(“http://openhab:8080/rest/items/MyVolumeItem”, data="DECREASE")
-
-def handle_mute():
-    print("[Action] Mute/Play-Pause pressed -> Send command to openHAB item")
-    # to do: For example, requests.post(“http://openhab:8080/rest/items/MyMuteItem”, data="TOGGLE")
-
+def get_command_description(cmd):
+    mapping = {
+        1: "Action: Volume Up (+)",
+        2: "Action: Volume Down (-)",
+        4: "Action: Mute / Unmute",
+        8: "Action: Play / Pause",
+        16: "Action: Next Track",
+        32: "Action: Previous Track"
+    }
+    return mapping.get(cmd, f"Unknown Command: {cmd}")
 
 if __name__ == "__main__":
     main()
